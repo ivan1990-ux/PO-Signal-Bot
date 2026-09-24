@@ -4,30 +4,79 @@ on:
   workflow_dispatch:
   push:
     branches:
-      - principal
+      - main
 
 jobs:
   build:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Descargar proyecto
+      - name: Descargar repositorio
         uses: actions/checkout@v4
 
-      - name: Configurar Java
+      - name: Configurar Java 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
 
-      - name: Dar permisos a Gradle
-        run: chmod +x gradlew
+      - name: Extraer proyecto Android
+        shell: bash
+        run: |
+          set -e
+          mkdir -p android_project
+          unzip -q PO_Signal_Bot_V1_Android.zip -d android_project
+          echo "Contenido extraído:"
+          find android_project -maxdepth 4 -type f | sort
 
-      - name: Compilar APK
-        run: ./gradlew assembleDebug
+      - name: Localizar proyecto Gradle
+        shell: bash
+        run: |
+          set -e
+          GRADLEW="$(find android_project -type f -name gradlew -print -quit || true)"
+          if [ -n "$GRADLEW" ]; then
+            PROJECT_DIR="$(dirname "$GRADLEW")"
+          else
+            SETTINGS="$(find android_project -type f \( -name settings.gradle -o -name settings.gradle.kts \) -print -quit || true)"
+            if [ -z "$SETTINGS" ]; then
+              echo "No se encontró settings.gradle/settings.gradle.kts"
+              exit 1
+            fi
+            PROJECT_DIR="$(dirname "$SETTINGS")"
+          fi
+          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
+          echo "Proyecto: $PROJECT_DIR"
+
+      - name: Preparar Gradle
+        shell: bash
+        run: |
+          set -e
+          if [ -f "$PROJECT_DIR/gradlew" ]; then
+            chmod +x "$PROJECT_DIR/gradlew"
+          else
+            echo "El ZIP no incluye Gradle Wrapper; se usará Gradle 8.7."
+          fi
+
+      - name: Configurar Gradle
+        if: ${{ hashFiles('android_project/**/gradlew') == '' }}
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
+
+      - name: Compilar APK Debug
+        shell: bash
+        run: |
+          set -e
+          cd "$PROJECT_DIR"
+          if [ -f "./gradlew" ]; then
+            ./gradlew assembleDebug --stacktrace
+          else
+            gradle assembleDebug --stacktrace
+          fi
 
       - name: Guardar APK
         uses: actions/upload-artifact@v4
         with:
           name: app-debug
-          path: app/build/outputs/apk/debug/app-debug.apk
+          path: android_project/**/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
