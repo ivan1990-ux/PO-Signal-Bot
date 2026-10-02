@@ -1,0 +1,5 @@
+plugins { id 'com.android.application' }
+
+android { namespace 'com.ivan1990.posignalbot'; compileSdk 35
+    defaultConfig { applicationId 'com.ivan1990.posignalbot'; minSdk 24; targetSdk 35; versionCode 2; versionName '2.0' }
+}
