@@ -1,43 +1,32 @@
 package com.ivan1990.posignalbot;
 
-import android.app.Activity;
-import android.os.Bundle;
-import android.graphics.Color;
-import android.graphics.Typeface;
-import android.view.Gravity;
-import android.view.View;
-import android.widget.*;
-import java.util.*;
+import android.app.*;import android.os.*;import android.graphics.*;import android.view.*;import android.widget.*;import java.text.*;import java.util.*;
 
-public class MainActivity extends Activity {
-    LinearLayout root, history; TextView signal, confidence, status, countdown; Spinner asset;
-    final Random rnd = new Random(42); ArrayList<Double> closes = new ArrayList<>(); int seconds=60;
-
-    int dp(float v){return (int)(v*getResources().getDisplayMetrics().density+0.5f);} 
-    TextView tv(String s,int sp){ TextView t=new TextView(this); t.setText(s); t.setTextColor(Color.WHITE); t.setTextSize(sp); t.setPadding(dp(12),dp(8),dp(12),dp(8)); return t; }
-
-    @Override public void onCreate(Bundle b){super.onCreate(b); build(); seed(); generateSignal();}
-    void build(){
-        root=new LinearLayout(this); root.setOrientation(LinearLayout.VERTICAL); root.setPadding(dp(16),dp(12),dp(16),dp(12)); root.setBackgroundColor(Color.rgb(5,11,24));
-        TextView title=tv("PO SIGNAL BOT",24); title.setTypeface(Typeface.DEFAULT,Typeface.BOLD); title.setGravity(Gravity.CENTER); root.addView(title,new LinearLayout.LayoutParams(-1,dp(48)));
-        TextView sub=tv("Señales de 1 minuto · método Price Action",14); sub.setTextColor(Color.LTGRAY); sub.setGravity(Gravity.CENTER); root.addView(sub);
-        asset=new Spinner(this); String[] a={"EUR/USD OTC","GBP/USD OTC","USD/JPY OTC","AUD/USD OTC"}; asset.setAdapter(new ArrayAdapter<String>(this,android.R.layout.simple_spinner_dropdown_item,a)); root.addView(asset,new LinearLayout.LayoutParams(-1,dp(48)));
-        status=tv("MODO DEMO — no conecta ni opera tu cuenta",13); status.setTextColor(Color.YELLOW); status.setGravity(Gravity.CENTER); root.addView(status);
-        signal=tv("SEÑAL: —",30); signal.setTypeface(Typeface.DEFAULT,Typeface.BOLD); signal.setGravity(Gravity.CENTER); signal.setPadding(0,dp(24),0,dp(8)); root.addView(signal);
-        confidence=tv("Confianza: —",18); confidence.setGravity(Gravity.CENTER); root.addView(confidence);
-        countdown=tv("Próxima revisión: 60 s",14); countdown.setGravity(Gravity.CENTER); root.addView(countdown);
-        Button btn=new Button(this); btn.setText("GENERAR SEÑAL"); btn.setOnClickListener(v->{seconds=60; generateSignal();}); root.addView(btn,new LinearLayout.LayoutParams(-1,dp(54)));
-        TextView note=tv("Regla: estructura de velas + impulso + ruptura/rechazo. Sin EMA y sin RSI.\nNO garantiza ganancias; validar en demo antes de usar dinero real.",13); note.setTextColor(Color.LTGRAY); root.addView(note);
-        TextView h=tv("HISTORIAL",16); h.setTypeface(Typeface.DEFAULT,Typeface.BOLD); root.addView(h); history=new LinearLayout(this); history.setOrientation(LinearLayout.VERTICAL); ScrollView sv=new ScrollView(this); sv.addView(history); root.addView(sv,new LinearLayout.LayoutParams(-1,0,1));
-        setContentView(root);
-        new android.os.Handler().postDelayed(new Runnable(){public void run(){ if(seconds>0) seconds--; countdown.setText("Próxima revisión: "+seconds+" s"); if(seconds==0){generateSignal();seconds=60;} new android.os.Handler().postDelayed(this,1000);}},1000);
-    }
-    void seed(){double p=1.1; for(int i=0;i<30;i++){p += (rnd.nextDouble()-.49)*0.002; closes.add(p);} }
-    void generateSignal(){
-        for(int i=0;i<5;i++){double last=closes.get(closes.size()-1); closes.add(last+(rnd.nextDouble()-.47)*0.0015); if(closes.size()>80)closes.remove(0);} 
-        int n=closes.size(); double shortMove=closes.get(n-1)-closes.get(n-4), longMove=closes.get(n-1)-closes.get(n-12); double avg=0; for(int i=n-6;i<n;i++)avg+=closes.get(i); avg/=6; double dist=closes.get(n-1)-avg;
-        String s="NO TRADE"; int c=50; if(shortMove>0 && longMove>0 && dist>0){s="BUY / SUBE"; c=70+(int)Math.min(24,Math.abs(shortMove)*12000);} else if(shortMove<0 && longMove<0 && dist<0){s="SELL / BAJA"; c=70+(int)Math.min(24,Math.abs(shortMove)*12000);} else {c=50+(int)Math.min(14,Math.abs(shortMove)*7000);} 
-        confidence.setText("Confianza estimada: "+c+"%  ·  Expiración: 1 min"); signal.setText("SEÑAL: "+s); signal.setTextColor(s.startsWith("BUY")?Color.rgb(50,220,100):s.startsWith("SELL")?Color.rgb(255,80,70):Color.WHITE);
-        TextView row=tv(new java.text.SimpleDateFormat("HH:mm:ss").format(new Date())+"  ·  "+s+"  ·  "+c+"%",14); history.addView(row,0);
-    }
+public class MainActivity extends Activity{
+ LinearLayout root,history;TextView signal,confidence,status;Spinner asset,timeframe;EditText key;Button connect;DataClient api=new DataClient();
+ List<DataClient.Symbol> symbols=new ArrayList<>();List<DataClient.Candle> candles=new ArrayList<>();DataClient.Candle forming;String sym="";int tf=60,minScore=80;long lastBucket=-1;
+ int dp(int x){return(int)(x*getResources().getDisplayMetrics().density+.5f);} TextView tv(String s,int z){TextView t=new TextView(this);t.setText(s);t.setTextColor(Color.WHITE);t.setTextSize(z);t.setPadding(dp(8),dp(5),dp(8),dp(5));return t;}
+ public void onCreate(Bundle b){super.onCreate(b);build();}
+ void build(){
+  root=new LinearLayout(this);root.setOrientation(LinearLayout.VERTICAL);root.setPadding(dp(10),dp(8),dp(10),dp(8));root.setBackgroundColor(Color.rgb(6,12,24));
+  TextView h=tv("POCKET SIGNAL PRO",23);h.setGravity(17);h.setTypeface(null,Typeface.BOLD);root.addView(h,new LinearLayout.LayoutParams(-1,dp(42)));
+  TextView sub=tv("Datos OTC reales · Price Action · sin EMA/RSI",13);sub.setGravity(17);root.addView(sub);
+  key=new EditText(this);key.setHint("OTCharts API key (otc_live_...)");key.setSingleLine(true);key.setTextColor(Color.WHITE);key.setHintTextColor(Color.GRAY);root.addView(key,new LinearLayout.LayoutParams(-1,dp(48)));
+  connect=new Button(this);connect.setText("CONECTAR DATOS REALES");connect.setOnClickListener(v->connect());root.addView(connect,new LinearLayout.LayoutParams(-1,dp(48)));
+  asset=new Spinner(this);root.addView(asset,new LinearLayout.LayoutParams(-1,dp(45)));
+  timeframe=new Spinner(this);String[] ts={"5 segundos","10 segundos","15 segundos","1 minuto","3 minutos","5 minutos"};timeframe.setAdapter(new ArrayAdapter<String>(this,android.R.layout.simple_spinner_dropdown_item,ts));timeframe.setSelection(3);timeframe.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener(){public void onNothingSelected(AdapterView<?>p){}public void onItemSelected(AdapterView<?>p,View v,int x,long id){tf=new int[]{5,10,15,60,180,300}[x];if(!sym.isEmpty())load();}});root.addView(timeframe,new LinearLayout.LayoutParams(-1,dp(45)));
+  asset.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener(){public void onNothingSelected(AdapterView<?>p){}public void onItemSelected(AdapterView<?>p,View v,int x,long id){if(x<symbols.size()){sym=symbols.get(x).id;load();}}});
+  status=tv("Estado: esperando clave de datos",12);status.setGravity(17);root.addView(status);
+  signal=tv("SEÑAL: ESPERANDO DATOS",25);signal.setGravity(17);signal.setTypeface(null,Typeface.BOLD);root.addView(signal,new LinearLayout.LayoutParams(-1,dp(55)));
+  confidence=tv("Puntaje: — / 100 · mínimo 80",16);confidence.setGravity(17);root.addView(confidence);
+  TextView n=tv("El 80–100 es un puntaje del modelo, NO una probabilidad garantizada. Solo se muestra señal desde 80. Operación siempre manual.",11);n.setTextColor(Color.LTGRAY);root.addView(n);
+  TextView ht=tv("HISTORIAL",14);ht.setTypeface(null,Typeface.BOLD);root.addView(ht);history=new LinearLayout(this);history.setOrientation(LinearLayout.VERTICAL);ScrollView sv=new ScrollView(this);sv.addView(history);root.addView(sv,new LinearLayout.LayoutParams(-1,0,1));setContentView(root);
+ }
+ void connect(){String k=key.getText().toString().trim();if(k.length()<10){status.setText("Estado: clave inválida");return;}connect.setEnabled(false);status.setText("Estado: leyendo catálogo OTC…");api.symbols(k,new DataClient.SymbolsCallback(){public void ok(List<DataClient.Symbol>s){runOnUiThread(()->{symbols=s;asset.setAdapter(new ArrayAdapter<DataClient.Symbol>(MainActivity.this,android.R.layout.simple_spinner_dropdown_item,symbols));status.setText("Conectado · "+s.size()+" instrumentos disponibles para tu clave");connect.setEnabled(true);});}public void error(String m){runOnUiThread(()->{status.setText("Estado: "+m);connect.setEnabled(true);});}});}
+ void load(){api.stopStream();candles.clear();forming=null;lastBucket=-1;String k=key.getText().toString().trim();status.setText("Estado: cargando velas reales…");api.candles(k,sym,tf,120,new DataClient.CandlesCallback(){public void ok(List<DataClient.Candle>c){runOnUiThread(()->{candles.addAll(c);status.setText("Datos cargados · esperando ticks de "+sym);evaluate();api.stream(k,sym,new DataClient.TickCallback(){public void tick(String s,long t,double p){tick(t,p);}public void error(String m){runOnUiThread(()->status.setText("Estado: "+m));}});});}public void error(String m){runOnUiThread(()->status.setText("Estado: "+m));}});}
+ void tick(long t,double p){long b=(t/tf)*tf;synchronized(this){if(forming==null||forming.time!=b){if(forming!=null){candles.add(forming);while(candles.size()>150)candles.remove(0);if(forming.time!=lastBucket){lastBucket=forming.time;evaluate();}}forming=new DataClient.Candle(b,p,p,p,p);}else{forming.high=Math.max(forming.high,p);forming.low=Math.min(forming.low,p);forming.close=p;}}}
+ void evaluate(){List<DataClient.Candle>c; synchronized(this){c=new ArrayList<>(candles);}if(c.size()<30)return;Score s=score(c);runOnUiThread(()->{confidence.setText("Puntaje: "+s.v+" / 100 · mínimo "+minScore);if(s.v>=minScore){String d=s.up?"🟢 ALZA":"🔴 BAJA";signal.setText("SEÑAL VÁLIDA: "+d);signal.setTextColor(s.up?Color.rgb(50,230,100):Color.rgb(255,80,70));history.addView(tv(new SimpleDateFormat("HH:mm:ss").format(new Date())+" · "+sym+" · "+d+" · "+s.v+"/100",12),0);}else{signal.setText("NO OPERAR");signal.setTextColor(Color.WHITE);}});}
+ static class Score{int v;boolean up;Score(int x,boolean u){v=x;up=u;}}
+ Score score(List<DataClient.Candle>c){int n=c.size(),u=0,d=0;for(int i=n-6;i<n;i++){if(c.get(i).close>c.get(i).open)u++;else if(c.get(i).close<c.get(i).open)d++;}DataClient.Candle x=c.get(n-1);double r=Math.max(x.high-x.low,1e-12),body=Math.abs(x.close-x.open)/r,uw=(x.high-Math.max(x.open,x.close))/r,lw=(Math.min(x.open,x.close)-x.low)/r;double ph=-1e300,pl=1e300;for(int i=n-11;i<n-1;i++){ph=Math.max(ph,c.get(i).high);pl=Math.min(pl,c.get(i).low);}boolean bu=x.close>ph,bd=x.close<pl;double m3=x.close-c.get(n-4).close,m8=x.close-c.get(n-9).close;int a=0,b=0;if(u>=4)a+=18;if(d>=4)b+=18;if(body>.55){if(x.close>x.open)a+=18;else if(x.close<x.open)b+=18;}if(bu)a+=20;if(bd)b+=20;if(lw>.45&&x.close>x.open)a+=12;if(uw>.45&&x.close<x.open)b+=12;if(m3>0)a+=10;else if(m3<0)b+=10;if(m8>0)a+=10;else if(m8<0)b+=10;int best=Math.max(a,b);int v=Math.min(100,50+best/2);if(best<60||Math.abs(a-b)<12)v=Math.min(v,79);return new Score(v,a>b);}
+ protected void onDestroy(){api.stopStream();super.onDestroy();}
 }
