@@ -84,7 +84,7 @@ public class MainActivity extends Activity{
     candles.addAll(c);status.setText("Estado: datos cargados · monitoreando "+sym+" · horizonte "+tfLabel(tf));
     evaluate();
     api.stream(k,sym,new DataClient.TickCallback(){
-     public void tick(String s,long t,double p){tick(t,p);}
+     public void tick(String s,long t,double p){MainActivity.this.tick(t,p);}
      public void error(String m){runOnUiThread(()->status.setText("Estado: "+m));}
     });
    });}
